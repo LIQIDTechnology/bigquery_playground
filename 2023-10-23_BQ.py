@@ -2,125 +2,142 @@ import os
 import sys
 import json
 import gzip
-import pathlib as Path
-import pandas as pd
+import numpy as np
 import datetime as dt
+from datetime import date as dt_date
+import db_dtypes
+
+from pathlib import Path
+import pandas as pd
+
 import configparser
 from google.cloud import bigquery
 from google.cloud import storage
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'third-being-207111-80cecaa4b7b0.json'
 
+def get_twr(portfolio_id, start_date, end_date):
 
-# storage_client = storage.Client()
-# # Specify the bucket name
-# bucket_name = 'liqid-airflow'
-# # Specify the folder (prefix) you want to list (e.g., 'allocation data/')
-# folder_prefix = 'allocation_data/'
-# # Get a reference to the bucket
-# bucket = storage_client.get_bucket(bucket_name)
-# # List objects in the folder
-# blobs = bucket.list_blobs(prefix=folder_prefix)
-# # Print the object names within the folder
-#
-# for blob in blobs:
-#     print(blob.name)
-#     # read blob which is a json
-#     # Download the compressed content as bytes
-#
-#     compressed_content = blob.download_as_bytes()
-#
-#     # Decompress the content
-#
-#     decompressed_content = gzip.decompress(compressed_content)
-#
-#     # Decode the decompressed content as UTF-8 text and parse as JSON
-#     json_data = json.loads(decompressed_content.decode('utf-8'))
-#     for k in json_data["resultLine"]["subLines"]:
-#         print(k["name"], k["values"][0]["rawValue"])
-#     print(json_data["resultLine"]["name"])
-#     for k in json_data["resultLine"]:
-#         print(k)
-#
-#     for x in json_data[12]:
-#         print(x("Portfolio__c"))
-#
-#     pf_id = json_data[12]["Portfolio__c"]
-#     # convert to dictionairy
-#     pf_alloc_json = json.loads(json_data[12]["JSON_Payload__c"])
-#     for key in pf_alloc_json:
-#         print(key)
-#     print(pf_alloc_json["headers"])
-#
-#     print(len(pf_alloc_json["resultLine"]["subLines"]))
-#     for row in pf_alloc_json["resultLine"]["subLines"][3]["subLines"][0]["subLines"][0]["values"]:
-#         print(row)
-#
-#     for key in pf_alloc_json["resultLine"]["subLines"]:
-#         print(key["name"], key)
-#     print(type(pf_alloc_json["resultLine"]["subLines"]))
-#     print(pf_alloc_json["resultLine"]["values"])
-#     for k in pf_alloc_json["resultLine"]["subLines"][3]:
-#         print(k)
-#     name = pf_alloc_json["resultLine"]["subLines"][3]["name"]
-#     value = pf_alloc_json["resultLine"]["subLines"][3]["values"][0]["rawValue"]
-#
-#     pf_alloc_df = pf_alloc_json["resultLine"]["subLines"]
-#
-#
-#     # print dictionairy pretty
-#
-#
-# # convert to dataframe
-# df = pd.DataFrame(json_data)
-#
-# # Convert the data to a DataFrame
+    client = bigquery.Client()
+    start_date = start_date.strftime('%Y/%m/%d')
+    end_date = end_date.strftime('%Y/%m/%d')
+
+    # works but risky!!!! f-Strings + SQL
+    QUERY = (f"""
+        SELECT *
+        FROM `third-being-207111.DWH.dwh_salesforce_twr`
+        WHERE portfolio_id = "{portfolio_id}" """)
+
+    query_job = client.query(QUERY)  # API request
+    df = query_job.to_dataframe()
+
+    df['dt'] = pd.to_datetime(df['dt'])
+    df.set_index('dt', inplace=True)
+    df.sort_index(ascending=False, inplace=True)
+
+    twr_start = df.loc[start_date]['twr']
+    twr_end = df.loc[end_date]['twr']
+
+    return_of_period = ((twr_end + 1) / (twr_start + 1)) - 1
+
+    return return_of_period
+
+def get_nav(portfolio_id):
+
+    client = bigquery.Client()
+    #works but risky!!!! f-Strings + SQL
+    QUERY = (f"""
+        SELECT *
+        FROM `third-being-207111.DWH.dwh_salesforce_nav`
+        WHERE portfolio_id = "{portfolio_id}" """)
+
+    query_job = client.query(QUERY)  # API request
+    df_nav = query_job.to_dataframe()
+
+    df_nav['dt'] = pd.to_datetime(df_nav['dt'])
+    df_nav.drop(columns=['portfolio_id'], inplace=True)
+    df_nav.set_index('dt', inplace=True)
+    df_nav.sort_index(ascending=False, inplace=True)
+
+    return df_nav
 
 
 
+def get_portfolio_info(portfolio_id):
+
+    client = bigquery.Client()
+    QUERY = (f"""
+        SELECT *
+        FROM `third-being-207111.ANALYTICS.analytics_portfolio` """)
+
+    query_job = client.query(QUERY)  # API request
+    df = query_job.to_dataframe()
+    portfolio_info = df.loc[df['portfolio_id'] == portfolio_id]
+
+    return portfolio_info
+
+def qplix_id_to_portfolio_id(qplix_id_dict):
+
+    portfolio_id = {}
+    portfolio_id_values = {}
+
+    client = bigquery.Client()
+    QUERY = (f"""
+        SELECT *
+        FROM `third-being-207111.ANALYTICS.analytics_portfolio` """)
+
+    query_job = client.query(QUERY)  # API request
+    df = query_job.to_dataframe()
+
+    # Get the corresponding portfolio_id from qplix_portfolio_id
+    for key, value in qplix_id_dict.items():
+
+        portfolio_id[key] = df.loc[df['qplix_portfolio_id'] == value]['portfolio_id'].values
+
+        if portfolio_id[key].size > 0:
+            portfolio_id_values[key] = portfolio_id[key][0]
+
+    return portfolio_id_values
 
 
 
-# Perform a query.
-client = bigquery.Client()
+def get_performance(qplix_id_dict):
+
+    performance = {}
+    # Get the corresponding portfolio_id from qplix_portfolio_id
+    performance_dict_portfolio_id = qplix_id_to_portfolio_id(qplix_id_dict)
+
+    for key, value in performance_dict_portfolio_id.items():
+        performance[key] = get_nav(value)
 
 
 
 
-#
-# QUERY = (
-#     'SELECT * '
-#     'FROM `third-being-207111.ANALYTICS.analytics_transaction` LIMIT 1000')
+    return performance
 
 
-QUERY = (
-    'SELECT *'
-    'FROM `third-being-207111.DWH.dwh_salesforce_twr`'
-    'WHERE dt = "2021-05-10" ')
+# main function
+if __name__ == '__main__':
+
+    config = configparser.RawConfigParser()
+    config.read('qplix-config.ini')
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = config['Credentials']['Goolge_credentials']
 
 
 
-query_job = client.query(QUERY)  # API request
-rows = query_job.result()  # Waits for query to finish
-df = query_job.to_dataframe()
-print(df)
 
-# write this code as class so in can be imported
-# class BigQueryConnector:
-#     def __init__(self):
-#         self.client = bigquery.Client()
-#
-#     def sample_query(self, sql_string):
-#         QUERY = (sql_string)
-#         query_job = self.client.query(QUERY)  # API request
-#         rows = query_job.result()  # Waits for query to finish
-#         # create dataframe from query_job.result()
-#         df = query_job.to_dataframe()
-#         return df
-#
-#
-# # main function
-# if __name__ == '__main__':
-#     bq = BigQueryConnector()
-#     sql_string = 'SELECT * FROM `third-being-207111.ANALYTICS.analytics_nav` LIMIT 1000'
-#     df = bq.sample_query(sql_string)
+    portfolio_id = "a000Y000019ZlfSQAS"
+
+    start_date = dt.date(2021, 5, 10)
+    end_date = dt.date(2023, 5, 10)
+
+
+    # return_of_period = get_twr(portfolio_id, start_date, end_date)
+    # nav = get_nav(portfolio_id)
+    #
+    # portfolio_info = get_portfolio_info(portfolio_id)
+    # Strategy = portfolio_info["portfolio_drill_1"].iloc[0]
+    # Risk_class = portfolio_info["portfolio_risk_level"].iloc[0]
+
+    qplix_id_dict = {strat: config['Client ID'][strat] for strat in config['Client ID']}
+    performance_report = get_performance(qplix_id_dict)
+    print(performance_report)
