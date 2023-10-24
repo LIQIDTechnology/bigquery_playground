@@ -41,6 +41,30 @@ def get_twr(portfolio_id, start_date, end_date):
 
     return return_of_period
 
+
+def get_twr_time_series(portfolio_id):
+
+    # get nav for a single portfolio with a single portfolio id
+
+    client = bigquery.Client()
+    #works but risky!!!! f-Strings + SQL
+
+    QUERY = (f"""
+        SELECT *
+        FROM `third-being-207111.DWH.dwh_salesforce_twr`
+        WHERE portfolio_id = "{portfolio_id}" """)
+
+    query_job = client.query(QUERY)  # API request
+    df_twr = query_job.to_dataframe()
+
+    df_twr['dt'] = pd.to_datetime(df_twr['dt'])
+    df_twr.drop(columns=['portfolio_id'], inplace=True)
+    df_twr.set_index('dt', inplace=True)
+    df_twr.sort_index(ascending=False, inplace=True)
+
+    return df_twr
+
+
 def get_nav(portfolio_id):
 
     # get nav for a single portfolio with a single portfolio id
@@ -164,7 +188,7 @@ def get_multi_performance(qplix_id_dict):
     return multi_performance
 
 
-def BQ_download_performance(qplix_id_dict, start_date, end_date):
+def BQ_download_performance(qplix_id_dict):
 
     # Get the corresponding portfolio_id from qplix_portfolio_id
     performance_dict_portfolio_id = qplix_id_to_portfolio_id(qplix_id_dict)
@@ -188,6 +212,7 @@ if __name__ == '__main__':
     config.read('qplix-config.ini')
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = config['Credentials']['Goolge_credentials']
 
+    portfolio_id = "a000Y000019ZlfSQAS"
 
     start_date = dt.date(2021, 5, 10)
     end_date = dt.date(2023, 5, 10)
@@ -195,6 +220,7 @@ if __name__ == '__main__':
 
     # return_of_period = get_twr(portfolio_id, start_date, end_date)
     # nav = get_nav(portfolio_id)
+    # twr_time_series = get_twr_time_series(portfolio_id)
 
     # portfolio_info = get_portfolio_info(portfolio_id)
     # Strategy = portfolio_info["portfolio_drill_1"].iloc[0]
@@ -203,7 +229,10 @@ if __name__ == '__main__':
     qplix_id_dict = {strat: config['Client ID'][strat] for strat in config['Client ID']}
     #performance_report = get_performance(qplix_id_dict)
 
-    # BQ_performance = BQ_download_performance(qplix_id_dict, start_date, end_date)
-    BQ_performance = get_multi_performance(qplix_id_dict)
+    # 28.5s
+    # BQ_performance = BQ_download_performance(qplix_id_dict)
+
+    # 7.68s
+    # BQ_performance = get_multi_performance(qplix_id_dict)
 
     print(BQ_performance)
