@@ -109,10 +109,23 @@ def get_performance(qplix_id_dict):
     for key, value in performance_dict_portfolio_id.items():
         performance[key] = get_nav(value)
 
-
-
-
     return performance
+
+def BQ_download_performance(qplix_id_dict, start_date, end_date):
+
+    # Get the corresponding portfolio_id from qplix_portfolio_id
+    performance_dict_portfolio_id = qplix_id_to_portfolio_id(qplix_id_dict)
+
+    performance_df = pd.DataFrame()
+
+    for key, value in performance_dict_portfolio_id.items():
+        ve = get_nav(value)
+        data = get_nav(value)
+        data = data.rename(columns={'nav':key})
+        performance_df = pd.concat([performance_df, data], axis=1)
+
+    return performance_df
+
 
 
 # main function
@@ -121,9 +134,6 @@ if __name__ == '__main__':
     config = configparser.RawConfigParser()
     config.read('qplix-config.ini')
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = config['Credentials']['Goolge_credentials']
-
-
-
 
     portfolio_id = "a000Y000019ZlfSQAS"
 
@@ -140,4 +150,7 @@ if __name__ == '__main__':
 
     qplix_id_dict = {strat: config['Client ID'][strat] for strat in config['Client ID']}
     performance_report = get_performance(qplix_id_dict)
-    print(performance_report)
+
+    BQ_performance = BQ_download_performance(qplix_id_dict, start_date, end_date)
+
+    print(BQ_performance)
