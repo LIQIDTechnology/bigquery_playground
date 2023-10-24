@@ -43,6 +43,8 @@ def get_twr(portfolio_id, start_date, end_date):
 
 def get_nav(portfolio_id):
 
+    # get nav for a single portfolio with a single portfolio id
+
     client = bigquery.Client()
     #works but risky!!!! f-Strings + SQL
     QUERY = (f"""
@@ -60,6 +62,44 @@ def get_nav(portfolio_id):
 
     return df_nav
 
+def get_multi_nav(portfolio_id_dict):
+    # get nav for multi portfolio with multi portfolio id in dictionary
+
+    df_multi_nav = pd.DataFrame()
+
+    #Generate the SQL Commands using f-string
+    # There is no "OR" before First id
+    first_id = True
+    for key, value in portfolio_id_dict.items():
+
+        if first_id:
+            sql_command_string = f"portfolio_id = \"{value}\""
+            first_id = False
+        else:
+            sql_command_string = sql_command_string + f" OR portfolio_id = \"{value}\""
+
+    client = bigquery.Client()
+    #works but risky!!!! f-Strings + SQL
+    QUERY = (f"""
+        SELECT *
+        FROM `third-being-207111.DWH.dwh_salesforce_nav`
+        WHERE {sql_command_string} """)
+
+    query_job = client.query(QUERY)  # API request
+    df_nav = query_job.to_dataframe()
+    df_nav['dt'] = pd.to_datetime(df_nav['dt'])
+    df_nav.set_index('dt', inplace=True)
+    df_nav.sort_index(ascending=False, inplace=True)
+
+
+    for key, value in portfolio_id_dict.items():
+
+        data = df_nav.loc[df_nav['portfolio_id'] == value].drop(columns="portfolio_id")
+        data = data.rename(columns={'nav': key})
+        df_multi_nav = pd.concat([df_multi_nav, data], axis=1, join='outer')
+
+
+    return df_multi_nav
 
 
 def get_portfolio_info(portfolio_id):
@@ -76,6 +116,7 @@ def get_portfolio_info(portfolio_id):
     return portfolio_info
 
 def qplix_id_to_portfolio_id(qplix_id_dict):
+    #find coressponding portfolio id to qplix id
 
     portfolio_id = {}
     portfolio_id_values = {}
@@ -103,6 +144,7 @@ def qplix_id_to_portfolio_id(qplix_id_dict):
 def get_performance(qplix_id_dict):
 
     performance = {}
+
     # Get the corresponding portfolio_id from qplix_portfolio_id
     performance_dict_portfolio_id = qplix_id_to_portfolio_id(qplix_id_dict)
 
@@ -110,6 +152,17 @@ def get_performance(qplix_id_dict):
         performance[key] = get_nav(value)
 
     return performance
+
+def get_multi_performance(qplix_id_dict):
+
+
+    # Get the corresponding portfolio_id from qplix_portfolio_id
+    performance_dict_portfolio_id = qplix_id_to_portfolio_id(qplix_id_dict)
+
+    multi_performance = get_multi_nav(performance_dict_portfolio_id)
+
+    return multi_performance
+
 
 def BQ_download_performance(qplix_id_dict, start_date, end_date):
 
@@ -119,9 +172,9 @@ def BQ_download_performance(qplix_id_dict, start_date, end_date):
     performance_df = pd.DataFrame()
 
     for key, value in performance_dict_portfolio_id.items():
-        ve = get_nav(value)
+
         data = get_nav(value)
-        data = data.rename(columns={'nav':key})
+        data = data.rename(columns={'nav': key})
         performance_df = pd.concat([performance_df, data], axis=1)
 
     return performance_df
@@ -135,7 +188,6 @@ if __name__ == '__main__':
     config.read('qplix-config.ini')
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = config['Credentials']['Goolge_credentials']
 
-    portfolio_id = "a000Y000019ZlfSQAS"
 
     start_date = dt.date(2021, 5, 10)
     end_date = dt.date(2023, 5, 10)
@@ -143,14 +195,15 @@ if __name__ == '__main__':
 
     # return_of_period = get_twr(portfolio_id, start_date, end_date)
     # nav = get_nav(portfolio_id)
-    #
+
     # portfolio_info = get_portfolio_info(portfolio_id)
     # Strategy = portfolio_info["portfolio_drill_1"].iloc[0]
     # Risk_class = portfolio_info["portfolio_risk_level"].iloc[0]
 
     qplix_id_dict = {strat: config['Client ID'][strat] for strat in config['Client ID']}
-    performance_report = get_performance(qplix_id_dict)
+    #performance_report = get_performance(qplix_id_dict)
 
-    BQ_performance = BQ_download_performance(qplix_id_dict, start_date, end_date)
+    # BQ_performance = BQ_download_performance(qplix_id_dict, start_date, end_date)
+    BQ_performance = get_multi_performance(qplix_id_dict)
 
     print(BQ_performance)
