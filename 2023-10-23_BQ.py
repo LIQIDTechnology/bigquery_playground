@@ -276,3 +276,4 @@ if __name__ == '__main__':
 
     print("return_of_period", return_of_period)
     print("twr_time_series", twr_time_series)
+    print("twr_time_series", twr_time_series)
