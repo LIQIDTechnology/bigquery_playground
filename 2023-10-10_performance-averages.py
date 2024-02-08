@@ -18,12 +18,12 @@ class PerformanceAverage:
         credentials_path = Path("third-being-207111-80cecaa4b7b0.json").absolute()
         self.os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(credentials_path)        # Set up a storage client for allocation data
         self.storage_client = storage.Client()
-        # Get a reference to the bucket
-        self.bucket = self.storage_client.get_bucket("liqid-airflow")
-        # List objects in the folder
-        self.blobs = self.bucket.list_blobs(prefix="allocation_data/")
-        # Set up a bigquery client
-        self.client = bigquery.Client()
+        # # Get a reference to the bucket
+        # self.bucket = self.storage_client.get_bucket("liqid-airflow")
+        # # List objects in the folder
+        # self.blobs = self.bucket.list_blobs(prefix="allocation_data/")
+        # # Set up a bigquery client
+        # self.client = bigquery.Client()
 
     def run_query(self, sql_string):
         """This function runs a query on the bigquery client and returns a dataframe"""
